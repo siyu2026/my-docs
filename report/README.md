@@ -26,13 +26,41 @@
 
 ### 2.3 本地构建或预览
 
-说明：创建Python虚拟环境并激活，安装requirements.txt中mkdocs相关依赖，执行`mkdocs build`构建站点，再执行`mkdocs serve`启动本地预览服务，访问127.0.0.1:8000，依次检查4个页面，确认导航跳转、表格、代码块都正常展示。
+说明：创建Python虚拟环境并激活，安装requirements.txt中mkdocs相关依赖，执行`mkdocs build`构建站点，再执行`mkdocs serve`启动本地预览服务，访问127.0.0.1:8000，依次检查4个页面，确认导航跳转、表格、代码块都正常展示。同时，在about.md中记录实践体会。
+
+![本地预览截图](images/03-terminal.png)
 
 ![本地预览截图](images/03-local-preview.png)
+
+![本地预览截图](images/03-local-preview2.png)
 
 ### 2.4 Pages 设置
 
 说明：进入仓库Settings-Pages页面，将Build and deployment的来源设置为GitHub Actions，保存配置，允许工作流运行，为自动部署GitHub Pages做好准备。
+
+1. **触发规则 `on`**
+
+- `push: branches:[main]`：仅向main分支推送代码时触发流水线；
+- `paths`路径过滤：仅当修改`docs/**`、`mkdocs.yml`、`requirements.txt`、`deploy.yml`这些文档与部署相关文件才执行部署；修改report等无关目录不会触发工作流；
+- `workflow_dispatch`：支持在GitHub网页手动点击运行该工作流。
+
+2. **顶层`permissions: contents: read`**
+   build任务只需要读取仓库源码，设置仓库只读权限；写权限单独交给deploy任务，遵循最小权限原则。
+
+3. **`concurrency`并发控制**
+   `group: pages`把所有部署归入同一分组；`cancel‑in‑progress: false`，新推送不会强行中断正在运行的部署，保证部署任务完整执行。
+
+4. **jobs 任务分为 build、deploy**
+
+- `build`任务（运行环境`ubuntu‑latest`）：
+  - `checkout`：拉取仓库源代码；
+  - `setup‑python`：配置Python3.12运行环境；
+  - `configure‑pages`：配置Pages部署环境；
+  - 安装依赖，执行`mkdocs build --strict`构建静态网站；
+  - `upload‑pages‑artifact`：将`site`构建产物上传为流水线工件，供部署阶段使用。
+- `deploy`任务，配置`needs: build`：**必须等待build任务成功完成才会执行**；
+  - 单独授予`pages: write`、`id‑token: write`部署写入权限；
+  - 绑定`github‑pages`环境，调用`deploy‑pages`将工件发布到GitHub Pages服务。
 
 ![pages设置](images/04-pages-setting.png)
 
@@ -48,6 +76,8 @@
 
 ![公网网站效果](images/06-webpage.png)
 
+![公网网站效果](images/06-webpage2.png)
+
 ### 2.7 第二次推送与自动更新验证
 
 - 对应提交链接：https://github.com/siyu2026/my-docs/commit/752ccb5b1e6fa329d0e4060b6cc0234bd27569f1
@@ -59,8 +89,6 @@
 
 ## 3. 问题与解决
 
-记录实际现象、关键日志、原因和解决操作。
-如没有遇到错误，说明你核对过哪些日志和配置。
 **问题描述**：修改 `docs/index.md`，在已有 Markdown 列表末尾追加验证文本时，未添加空行，导致页面渲染后新增文字和上一行链接合并在同一行，排版错乱。
 
 **原因分析**：Markdown 语法对换行有严格要求，列表项结束后，如果不增加空换行，后续文本会被识别为该行的延续内容，和链接渲染在同一行。
